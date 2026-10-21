@@ -13,6 +13,10 @@ MODEL_NAME = "gemini-3.8-flash"
 DATABASE_PATH = "./company_db"
 COLLECTION_NAME = "company_policies"
 
+# ChromaDB cosine distance: lower means more similar.
+# This is a starting value to test, not a universal cutoff.
+MAX_DISTANCE = 0.65
+
 api_key = os.getenv("GEMINI_API_KEY")
 
 if not api_key:
@@ -65,16 +69,23 @@ def load_policies():
 # 3. RETRIEVE RELEVANT POLICIES
 
 def retrieve_policies(question):
-    """Find the two most relevant policies."""
-
+    """Retrieve relevant policies and reject distant matches."""
     results = collection.query(
         query_texts=[question],
         n_results=2,
+        include=["documents", "distances"],
     )
 
-    return results["documents"][0]
+    documents = results["documents"][0]
+    distances = results["distances"][0]
 
+    relevant_documents = [
+        document
+        for document, distance in zip(documents, distances)
+        if distance <= MAX_DISTANCE
+    ]
 
+    return relevant_documents
 # 4. GENERATE AN ANSWER
 
 def generate_answer(question, documents):
@@ -129,12 +140,15 @@ def main():
 
     print("\nRelevant company policies:")
 
-    for document in documents:
-        print("-", document)
+    if documents:
+        for document in documents:
+            print("-", document)
+    else:
+        print("No sufficiently similar policies found.")
 
     answer = generate_answer(question, documents)
 
-    print("\nGemini's answer:")
+    print("\nAnswer:")
     print(answer)
 
 
